@@ -5,69 +5,70 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Pré-sala | Psii + LiveKit</title>
 
-  <!-- Estilos oficiais dos componentes (ESSENCIAL) -->
+  <!-- CSS oficial dos Components -->
   <link rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/@livekit/components@latest/dist/style.css" />
+        href="https://cdn.jsdelivr.net/npm/@livekit/components@2.5.6/dist/style.css" />
 
   <style>
     :root { color-scheme: dark; }
-    html,body{height:100%;margin:0;background:#0f1115;color:#eaecef;font-family:Inter,system-ui,Arial}
-    .wrap{height:100%;display:flex;align-items:center;justify-content:center;padding:12px}
-    livekit-room, livekit-video-conference{width:100%;height:100%}
-    .msg{position:fixed;left:0;right:0;top:0;padding:10px 16px;background:#151922;border-bottom:1px solid #2a2f3a}
+    html,body { height:100%; margin:0; background:#0f1115; color:#eaecef; font-family:Inter,system-ui,Arial }
+    .wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:12px }
+    livekit-room, livekit-video-conference { width:100%; height:100% }
+    #msg { position:fixed; left:0; right:0; top:0; padding:10px 16px; background:#151922; border-bottom:1px solid #2a2f3a; display:none; white-space:pre-wrap }
   </style>
-
-  <!-- Web Components -->
-  <script type="module">
-    import 'https://cdn.jsdelivr.net/npm/@livekit/components@latest/dist/livekit-elements.js';
-
-    const setMsg = (txt) => {
-      const el = document.getElementById('msg');
-      el.textContent = txt; el.style.display = 'block';
-      console.log(txt);
-    };
-
-    window.addEventListener('DOMContentLoaded', async () => {
-      try {
-        const p  = new URLSearchParams(location.search);
-        const token = p.get('token') || '';
-        const ws    = p.get('ws') || p.get('serverUrl') || '';
-
-        if (!token || !ws) {
-          setMsg('Cadê token/ws? Use ?token=...&ws=wss://seu-projeto.livekit.cloud');
-          return;
-        }
-
-        setMsg('Carregando pré-sala…');
-        await customElements.whenDefined('livekit-room');
-
-        const room = document.getElementById('room');
-        room.connect = false;        // garante pré-join
-        room.serverUrl = ws;
-        room.token = token;
-
-        // depois que setar tudo, esconde mensagem
-        setMsg('');
-        document.getElementById('msg').style.display = 'none';
-      } catch (e) {
-        setMsg('Erro ao inicializar: ' + (e?.message || e));
-      }
-    });
-  </script>
 </head>
 <body>
-  <div id="msg" class="msg" style="display:none"></div>
+  <div id="msg">Carregando…</div>
 
   <div class="wrap">
-    <livekit-room id="room" style="width:100%;height:100%;">
-      <!-- PRÉ-JOIN (preview + seleção de dispositivos) -->
+    <livekit-room id="room" style="width:100%; height:100%;">
+      <!-- Pré-join com preview -->
       <livekit-prejoin slot="prejoin"
-        style="--lk-control-bar-bg:#151922;--lk-bg:#0f1115;--lk-button-primary-bg:#00B37E;--lk-button-primary-text:#fff">
+        style="--lk-control-bar-bg:#151922; --lk-bg:#0f1115; --lk-button-primary-bg:#00B37E; --lk-button-primary-text:#fff">
       </livekit-prejoin>
 
       <!-- Conferência após confirmar -->
       <livekit-video-conference></livekit-video-conference>
     </livekit-room>
   </div>
+
+  <!-- JS com fallback e logs -->
+  <script type="module">
+    const show = (t) => { const m = document.getElementById('msg'); m.textContent = t; m.style.display = t ? 'block' : 'none'; console.log(t); };
+
+    (async () => {
+      try {
+        // carrega Components (versão fixa)
+        await import('https://cdn.jsdelivr.net/npm/@livekit/components@2.5.6/dist/livekit-elements.js');
+      } catch (e) {
+        show('Falha ao carregar LiveKit Components.\n' + (e?.message || e));
+        return;
+      }
+
+      try {
+        const p = new URLSearchParams(location.search);
+        const token = p.get('token') || '';
+        const ws    = p.get('ws') || p.get('serverUrl') || '';
+
+        if (!token || !ws) {
+          show('Token ou serverUrl ausentes.\nUse ?token=...&ws=wss://seu-projeto.livekit.cloud');
+          return;
+        }
+
+        show('Inicializando pré-sala…');
+
+        await customElements.whenDefined('livekit-room');
+
+        const room = document.getElementById('room');
+        room.connect = false;      // garante pré-join
+        room.serverUrl = ws;       // wss://psii-6uf2uxfg.livekit.cloud
+        room.token = token;        // seu JWT
+
+        show(''); // esconde barra de status
+      } catch (e) {
+        show('Erro durante init:\n' + (e?.message || e));
+      }
+    })();
+  </script>
 </body>
 </html>
