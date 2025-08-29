@@ -3,25 +3,68 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Pré-sala | Psii</title>
-  <script type="module">
+  <title>Pré-sala | Psii + LiveKit</title>
+  <style>
+    html,body{height:100%;margin:0;background:#0f1115;color:#eaecef;font-family:Inter,system-ui,Arial}
+    .wrap{height:100%;display:flex;align-items:center;justify-content:center;padding:12px}
+    livekit-room, livekit-video-conference{width:100%;height:100%}
+    .msg{max-width:760px;margin:16px auto;padding:16px;border:1px solid #333;border-radius:12px;background:#141820;white-space:pre-wrap}
+  </style>
+
+  <!-- Carrega os Web Components do LiveKit -->
+  <script type="module" crossorigin>
     import 'https://cdn.jsdelivr.net/npm/@livekit/components@latest/dist/livekit-elements.js';
 
-    window.addEventListener('DOMContentLoaded', () => {
-      const params = new URLSearchParams(location.search);
-      const token = params.get('token');
-      const ws = params.get('ws');
+    const show = (txt) => {
+      const el = document.getElementById('msg');
+      el.style.display = 'block';
+      el.textContent = String(txt);
+      console.log(txt);
+    };
 
-      const roomEl = document.getElementById('room');
-      roomEl.token = token;
-      roomEl.serverUrl = ws;
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const params = new URLSearchParams(location.search);
+        const token = params.get('token') || '';
+        const ws    = params.get('ws') || params.get('serverUrl') || '';
+
+        if (!token || !ws) {
+          show('Token ou serverUrl ausentes.\nUse ?token=...&ws=wss://SEU-PROJETO.livekit.cloud');
+          return;
+        }
+
+        // Diagnóstico rápido
+        show('Carregando pré-sala...\n\nserverUrl: ' + ws.slice(0,40) + '...\nToken (inicio): ' + token.slice(0,20) + '...');
+
+        // Espera os custom elements estarem prontos
+        await customElements.whenDefined('livekit-room');
+
+        const roomEl = document.getElementById('room');
+        roomEl.serverUrl = ws;
+        roomEl.token = token;
+
+        // Oculta mensagem após configurar
+        document.getElementById('msg').style.display = 'none';
+      } catch (e) {
+        show('Erro ao inicializar: ' + (e?.message || e));
+      }
     });
   </script>
 </head>
-<body style="margin:0;height:100%;">
-  <livekit-room id="room" connect="false" style="width:100%;height:100%;">
-    <livekit-prejoin slot="prejoin"></livekit-prejoin>
-    <livekit-video-conference></livekit-video-conference>
-  </livekit-room>
+<body>
+  <div class="wrap">
+    <livekit-room id="room" connect="false" style="width:100%;height:100%;">
+      <!-- Pré-join com preview de câmera/mic -->
+      <livekit-prejoin slot="prejoin"
+        style="--lk-control-bar-bg:#151922;--lk-bg:#0f1115;--lk-button-primary-bg:#00B37E;--lk-button-primary-text:#fff">
+      </livekit-prejoin>
+
+      <!-- Conferência após confirmar -->
+      <livekit-video-conference></livekit-video-conference>
+    </livekit-room>
+  </div>
+
+  <!-- Área de mensagens/erros visíveis -->
+  <div id="msg" class="msg" style="display:none"></div>
 </body>
 </html>
