@@ -3,78 +3,144 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Pré-sala | Psii + LiveKit</title>
-
-  <!-- CSS dos Components (UNPKG) -->
-  <link rel="stylesheet"
-        href="https://unpkg.com/@livekit/components@2.5.6/dist/style.css" />
-
+  <title>Pré-sala | Psii</title>
   <style>
     :root { color-scheme: dark; }
     html,body { height:100%; margin:0; background:#0f1115; color:#eaecef; font-family:Inter,system-ui,Arial }
-    .wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:12px }
-    livekit-room, livekit-video-conference { width:100%; height:100% }
-    #msg { position:fixed; left:0; right:0; top:0; padding:10px 16px; background:#151922; border-bottom:1px solid #2a2f3a; display:none; white-space:pre-wrap }
+    .wrap { min-height:100vh; max-width:920px; margin:0 auto; padding:24px; display:flex; gap:24px; align-items:flex-start; justify-content:center; box-sizing:border-box }
+    .panel { flex:1; background:#141820; border:1px solid #202534; border-radius:16px; padding:16px }
+    h1 { margin:0 0 12px 0; font-size:20px }
+    video { width:100%; background:#000; border-radius:12px }
+    .row { display:flex; gap:8px; margin-top:10px }
+    select, button { padding:10px 12px; border-radius:8px; border:1px solid #2a2f3a; background:#1a1f2b; color:#eaecef }
+    button.primary { background:#00B37E; border-color:#00B37E; color:#fff; font-weight:600 }
+    .muted { opacity:.6 }
+    .hint { font-size:12px; color:#9aa4b2; margin-top:6px }
+    .error { background:#2b1a1a; border:1px solid #593; color:#ffb3b3; padding:10px; border-radius:8px; margin-top:8px; white-space:pre-wrap }
   </style>
 </head>
 <body>
-  <div id="msg">Carregando…</div>
-
   <div class="wrap">
-    <livekit-room id="room" style="width:100%; height:100%;">
-      <!-- PRÉ-JOIN (preview) -->
-      <livekit-prejoin slot="prejoin"
-        style="--lk-control-bar-bg:#151922; --lk-bg:#0f1115; --lk-button-primary-bg:#00B37E; --lk-button-primary-text:#fff">
-      </livekit-prejoin>
+    <div class="panel">
+      <h1>Pré-visualização</h1>
+      <video id="preview" playsinline autoplay muted></video>
+      <div class="row">
+        <button id="toggleCam">Câmera</button>
+        <button id="toggleMic">Microfone</button>
+      </div>
+      <div class="row">
+        <select id="camSel" title="Câmera"></select>
+        <select id="micSel" title="Microfone"></select>
+      </div>
+      <div class="hint">Dica: permita o acesso à câmera e ao microfone quando o navegador solicitar.</div>
+      <div id="err" class="error" style="display:none"></div>
+    </div>
 
-      <!-- Conferência após confirmar -->
-      <livekit-video-conference></livekit-video-conference>
-    </livekit-room>
+    <div class="panel">
+      <h1>Entrar na chamada</h1>
+      <p>Quando estiver tudo ok, clique em <b>Entrar</b> para abrir a sala.</p>
+      <div class="row">
+        <button id="enter" class="primary">Entrar</button>
+      </div>
+      <div class="hint">
+        Esta pré-sala não conecta no LiveKit; ela só faz o preview local.<br>
+        Ao clicar em <b>Entrar</b>, você será enviado para o LiveKit Meet com o seu <i>token</i>.
+      </div>
+    </div>
   </div>
 
-  <script type="module">
-    const show = (t) => { const m=document.getElementById('msg'); m.textContent=t; m.style.display=t?'block':'none'; console.log(t); };
+  <script>
+    const q = new URLSearchParams(location.search);
+    const token = q.get('token') || '';
+    const meetBase = q.get('meet') || 'https://meet.livekit.io'; // pode trocar depois por seu domínio
 
-    async function loadComponents() {
-      const sources = [
-        'https://unpkg.com/@livekit/components@2.5.6/dist/livekit-elements.js',
-        'https://cdn.jsdelivr.net/npm/@livekit/components@2.5.6/dist/livekit-elements.js',
-        'https://esm.sh/@livekit/components@2.5.6/dist/livekit-elements.js'
-      ];
-      let lastErr;
-      for (const src of sources) {
-        try { show('Carregando Components de: ' + src); await import(src); return; }
-        catch (e) { lastErr = e; }
+    const previewEl = document.getElementById('preview');
+    const camSel = document.getElementById('camSel');
+    const micSel = document.getElementById('micSel');
+    const errEl = document.getElementById('err');
+    const btnCam = document.getElementById('toggleCam');
+    const btnMic = document.getElementById('toggleMic');
+    const btnEnter = document.getElementById('enter');
+
+    let stream = null;
+    let currentVideoId = null;
+    let currentAudioId = null;
+
+    function showErr(msg){ errEl.style.display='block'; errEl.textContent = msg; }
+    function clearErr(){ errEl.style.display='none'; errEl.textContent = ''; }
+
+    async function startPreview(videoId, audioId){
+      try {
+        clearErr();
+        if (stream) stream.getTracks().forEach(t => t.stop());
+
+        const constraints = {
+          video: videoId ? { deviceId: { exact: videoId } } : true,
+          audio: audioId ? { deviceId: { exact: audioId } } : true,
+        };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        previewEl.srcObject = stream;
+      } catch (e) {
+        showErr('Falha ao acessar câmera/microfone.\n' + (e.message || e));
       }
-      throw lastErr || new Error('Falha ao importar Components');
     }
 
+    async function loadDevices(){
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        camSel.innerHTML = '';
+        micSel.innerHTML = '';
+
+        for (const d of devices) {
+          const opt = document.createElement('option');
+          opt.value = d.deviceId;
+          opt.textContent = d.label || (d.kind === 'videoinput' ? 'Câmera' : 'Microfone');
+          if (d.kind === 'videoinput') camSel.appendChild(opt);
+          if (d.kind === 'audioinput') micSel.appendChild(opt.cloneNode(true));
+        }
+        if (camSel.options.length) currentVideoId = camSel.value = camSel.options[0].value;
+        if (micSel.options.length) currentAudioId = micSel.value = micSel.options[0].value;
+      } catch(e){
+        showErr('Não foi possível listar dispositivos.\n' + (e.message || e));
+      }
+    }
+
+    btnCam.onclick = () => {
+      if (!stream) return;
+      stream.getVideoTracks().forEach(t => t.enabled = !t.enabled);
+      const on = stream.getVideoTracks().some(t => t.enabled);
+      btnCam.classList.toggle('muted', !on);
+    };
+    btnMic.onclick = () => {
+      if (!stream) return;
+      stream.getAudioTracks().forEach(t => t.enabled = !t.enabled);
+      const on = stream.getAudioTracks().some(t => t.enabled);
+      btnMic.classList.toggle('muted', !on);
+    };
+
+    camSel.onchange = () => { currentVideoId = camSel.value; startPreview(currentVideoId, currentAudioId); };
+    micSel.onchange = () => { currentAudioId = micSel.value; startPreview(currentVideoId, currentAudioId); };
+
+    btnEnter.onclick = () => {
+      if (!token) { showErr('Token ausente. Abra esta página com ?token=SEU_JWT'); return; }
+      // encerra o preview para liberar a câmera
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      // redireciona para o LiveKit Meet com o token
+      const url = meetBase + '?token=' + encodeURIComponent(token);
+      window.location.href = url;
+    };
+
+    // fluxo inicial
     (async () => {
       try {
-        await loadComponents();
-      } catch(e) {
-        show('Falha ao carregar LiveKit Components.\n' + (e?.message || e));
-        return;
-      }
-
-      try {
-        const p = new URLSearchParams(location.search);
-        const token = p.get('token') || '';
-        const ws    = p.get('ws') || p.get('serverUrl') || '';
-        if (!token || !ws) {
-          show('Token ou serverUrl ausentes.\nUse ?token=...&ws=wss://seu-projeto.livekit.cloud');
+        if (!navigator.mediaDevices?.getUserMedia) {
+          showErr('Seu navegador não suporta getUserMedia.');
           return;
         }
-
-        await customElements.whenDefined('livekit-room');
-        const room = document.getElementById('room');
-        room.connect = false;     // mantém pré-join
-        room.serverUrl = ws;
-        room.token = token;
-
-        show('');
-      } catch (e) {
-        show('Erro durante init:\n' + (e?.message || e));
+        await startPreview(null, null);        // pede permissão e mostra preview
+        await loadDevices();                   // popula selects
+      } catch(e) {
+        showErr(e.message || e);
       }
     })();
   </script>
